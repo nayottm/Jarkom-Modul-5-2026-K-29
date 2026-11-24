@@ -2,8 +2,8 @@
 
 ## Anggota
 
-- Julian
-- Arul
+### Ahmad Nayottama Juliansyah - 5027251045
+### Muhammad Nasrulhaq - 5027251117
 
 ## Soal: Operation Geofront
 
