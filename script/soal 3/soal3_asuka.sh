@@ -8,11 +8,11 @@
 # Uji bukti  : bash /root/soal3_asuka.sh test    (ip -br a + ip route + uji ping Soal 3)
 # ==============================================================================
 
-IF_LAN="eth0"   # ke Switch-Archive (gateway LAN)
-IF_UP="eth1"   # ke Gendo (router induk)
+IF_UP="eth0"   # ke Gendo (router induk)
+IF_LAN="eth1"   # ke Switch-Archive (gateway LAN)
 IF_KENSUKE="eth2"   # ke Kensuke (router cabang)
 IF_RITSUKO="eth3"   # ke Ritsuko (router cabang)
-# VERIFIKASI nama interface dulu: ip -br link  (urutan adapter GNS3 bisa berbeda). Ubah variabel di atas bila perlu.
+# Pemetaan dibaca dari label interface GNS3. Verifikasi dgn ping link setelah setup. Ubah variabel di atas bila perlu.
 set -eu
 
 ping_target() {

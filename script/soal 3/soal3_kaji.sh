@@ -8,9 +8,9 @@
 # Uji bukti  : bash /root/soal3_kaji.sh test    (ip -br a + ip route + uji ping Soal 3)
 # ==============================================================================
 
-IF_LAN="eth0"   # ke Switch-Intel (gateway LAN)
-IF_UP="eth1"   # ke Gendo (router induk)
-# VERIFIKASI nama interface dulu: ip -br link  (urutan adapter GNS3 bisa berbeda). Ubah variabel di atas bila perlu.
+IF_UP="eth0"   # ke Gendo (router induk)
+IF_LAN="eth1"   # ke Switch-Intel (gateway LAN)
+# Pemetaan dibaca dari label interface GNS3. Verifikasi dgn ping link setelah setup. Ubah variabel di atas bila perlu.
 set -eu
 
 ping_target() {
