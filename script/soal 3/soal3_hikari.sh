@@ -1,72 +1,96 @@
 #!/bin/bash
 # ==============================================================================
-# Modul 5 Operation Geofront — Soal 3 (Router HIKARI — IP Interface, Forwarding & Routing Statis)
-# Kelompok: K-29 (10.78.0.0/16) | PIC: Julian
-# Catatan : IP interface (Soal 2) + IP forwarding + routing statis (Soal 3). Idempotent: aman dijalankan berulang.
+# Modul 5 Operation Geofront — Soal 3 (Routing Statis Router HIKARI: 2 rute, default -> Gendo + Switch-Relay)
+# Kelompok: K-29 (10.78.0.0/16) | Image: ardhptr21/debinet:latest | PIC: Julian
+# Prasyarat : Soal 2 sudah jalan (bash /root/hikari.sh). Script ini TIDAK mengubah IP/interface,
+#             hanya menambah rute (idempotent: aman dijalankan berulang).
+# PENTING   : Jika /root/hikari.sh (Soal 2) dijalankan ulang, 'ip addr flush' ikut menghapus rute
+#             Soal 3 -> jalankan ulang script ini sesudahnya.
 # Letakkan di: /root/soal3_hikari.sh
-# Jalankan   : bash /root/soal3_hikari.sh         (pasang IP, forwarding & rute)
-# Uji bukti  : bash /root/soal3_hikari.sh test    (ip -br a + ip route + uji ping Soal 3)
+# Jalankan   : bash /root/soal3_hikari.sh         (pasang default route + rute subnet bawah)
+# Uji bukti  : bash /root/soal3_hikari.sh test    (ip route + ip route get + ping)
 # ==============================================================================
 
-IF_UP="eth0"   # ke Gendo (router induk)
-IF_LAN="eth1"   # ke Switch-Comm (gateway LAN)
-IF_KAWORU="eth2"   # ke Kaworu (router cabang)
-# Pemetaan dibaca dari label interface GNS3. Verifikasi dgn ping link setelah setup. Ubah variabel di atas bila perlu.
+SOAL2_SCRIPT="hikari.sh"
+GW_UP="10.78.4.113"     # default route ke Gendo
+
 set -eu
 
-ping_target() {
+require_onlink() {
+    # Next-hop harus berada di subnet yang terhubung langsung (hasil Soal 2).
+    GW="$1"; DESC="$2"
+    if ! RG=$(ip route get "$GW" 2>/dev/null) || printf '%s' "$RG" | grep -q " via "; then
+        echo "[!] ERROR: next-hop $GW ($DESC) belum terhubung langsung."
+        echo "    Jalankan dulu Soal 2: bash /root/$SOAL2_SCRIPT"
+        return 1
+    fi
+}
+
+ensure_forwarding() {
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "1" ]; then
+        echo "[!] ip_forward masih 0 -> diaktifkan ulang (idempotent, sama seperti Soal 2)."
+        sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || echo 1 > /proc/sys/net/ipv4/ip_forward
+    fi
+}
+
+set_default_route() {
+    GW="$1"; DESC="$2"
+    while ip route del default 2>/dev/null; do :; done
+    ip route add default via "$GW"
+    echo "    -> default via $GW ($DESC)"
+}
+
+add_route() {
+    NET="$1"; GW="$2"; DESC="$3"
+    ip route replace "$NET" via "$GW"
+    echo "    -> $NET via $GW ($DESC)"
+}
+
+ping_peer() {
     echo ">>> Ping ke $2 ($1)"
     if ping -c 3 -W 2 "$1"; then
-        echo "    [OK] $2 ($1) terjangkau."
+        echo "    [OK] $2 ($1) terhubung."
     else
-        echo "    [GAGAL] $2 ($1) belum merespons."
+        echo "    [GAGAL] $2 ($1) belum merespons (cek rute di router lawan / Gendo)."
     fi
     echo ""
 }
 
-show_status() {
+show_summary() {
     echo "============================================================"
-    echo "Status Node - $(hostname)"
+    echo "Tabel Rute (ip route) - $(hostname) [debinet] - Soal 3"
     echo "============================================================"
-    ip -br a
-    echo "------------------------------------------------------------"
     ip route
+    echo "------------------------------------------------------------"
+    sysctl net.ipv4.ip_forward 2>/dev/null || echo "net.ipv4.ip_forward = $(cat /proc/sys/net/ipv4/ip_forward)"
     echo "============================================================"
 }
 
 setup() {
-    echo "=== Konfigurasi Soal 2-3: Router Hikari ==="
-    ip link set dev lo up 2>/dev/null || true
-
-    # IP forwarding (Soal 2)
-    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || echo 1 > /proc/sys/net/ipv4/ip_forward
-
-    # IP interface (Soal 2) — flush dulu agar tidak dobel / 'File exists'
-    ip link set dev "$IF_LAN" up
-    ip addr flush dev "$IF_LAN"
-    ip addr add "10.78.2.1/24" dev "$IF_LAN"
-    ip link set dev "$IF_UP" up
-    ip addr flush dev "$IF_UP"
-    ip addr add "10.78.4.114/30" dev "$IF_UP"
-    ip link set dev "$IF_KAWORU" up
-    ip addr flush dev "$IF_KAWORU"
-    ip addr add "10.78.4.149/30" dev "$IF_KAWORU"
-
-    # Routing statis (Soal 3): default ke atas (Gendo)
-    ip route replace default via "10.78.4.113"
-    # Rute ke LAN di bawah (tidak bisa diringkas: blok tidak bertetangga / akan bocor ke cabang lain)
-    ip route replace "10.78.3.224/27" via "10.78.4.150"   # LAN Kaworu (Switch-Relay)
-    show_status
+    echo "=== Konfigurasi Soal 3 (debinet): Routing Statis Router HIKARI ==="
+    require_onlink "$GW_UP" "Gendo"
+    require_onlink "10.78.4.150" "Kaworu"
+    ensure_forwarding
+    set_default_route "$GW_UP" "Gendo"
+    add_route "10.78.3.224/27"  "10.78.4.150" "Switch-Relay via Kaworu"
+    show_summary
 }
 
 run_test() {
-    show_status
-    echo "=== Uji Ping Bukti Soal 3 ==="
-    ping_target "10.78.4.113" "Gendo (router induk, link)"
-    ping_target "10.78.4.150" "Kaworu (router cabang, link)"
-    ping_target "10.78.4.105" "Gendo sisi Switch-Cmd (butuh rute Gendo)"
-    ping_target "10.78.4.83" "Armisael (Arul — butuh rute Gendo/Shigeru dari Arul)"
-    ping_target "10.78.4.74" "Lilith (Arul — butuh rute Gendo/Toji/Fuyutsuki dari Arul)"
+    show_summary
+    echo "=== Keputusan Rute (ip route get) ==="
+    ip route get 10.78.4.113 || echo "    [!] tidak ada rute ke 10.78.4.113"
+    ip route get 10.78.4.150 || echo "    [!] tidak ada rute ke 10.78.4.150"
+    ip route get 10.78.4.105 || echo "    [!] tidak ada rute ke 10.78.4.105"
+    ip route get 10.78.4.73 || echo "    [!] tidak ada rute ke 10.78.4.73"
+    ip route get 10.78.4.81 || echo "    [!] tidak ada rute ke 10.78.4.81"
+    echo ""
+    echo "=== Uji Ping ==="
+    ping_peer "10.78.4.113" "Gendo"
+    ping_peer "10.78.3.225" "Kaworu (gw Relay)"
+    ping_peer "10.78.4.105" "Gendo (gw Switch-Cmd)"
+    ping_peer "10.78.4.73" "Toji (gw Lilith)"
+    ping_peer "10.78.4.81" "Shigeru (gw Armisael)"
 }
 
 if [ "${1:-setup}" = "test" ]; then
